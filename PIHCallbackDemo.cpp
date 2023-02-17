@@ -5,12 +5,24 @@
 #include "resource.h"
 #include <stdlib.h>
 #include "PIEHid32.h"
+#include "GameInfo.h"
 
 #include <string.h>
 #include <stdio.h>
-#include <math.h> //for use of pow
 
-#define MAXDEVICES  128   //max allowed array size for enumeratepie =128 devices*4 bytes per device
+
+char test[] = {
+	CONE, HIGH, ONE,
+	CUBE, MID, EIGHT,
+	CUBE, LOW, FIVE,
+	CONE, HIGH, FOUR,
+};
+
+int testi = 0;
+int teste = 0;
+int tests = 0;
+
+#define MAXDEVICES  4   //max allowed array size for enumeratepie =128 devices*4 bytes per device
 
 
 // function declares 
@@ -26,13 +38,24 @@ void AddDevices(HWND hDialog, char *msg);
 DWORD __stdcall HandleDataEvent(UCHAR *pData, DWORD deviceID, DWORD error);
 DWORD __stdcall HandleErrorEvent(DWORD deviceID, DWORD status);
 
+void GamePieceLED(char gp);
+void LevelLED(char sl);
+void SlotLED(char ss);
+void ClearLEDs();
+void StartupLEDs();
+void SlowWrite(long hnd, UCHAR* data);
+void TestEntry();
+
 BYTE buffer[80];  //used for writing to device
 BYTE lastpData[80];  //stores the data of the previous read
 int readlength=0; 
 
 HWND hDialog;
 long hDevice = -1;
-int combotodevice[128];
+int combotodevice[MAXDEVICES];
+int game_piece = CONE;
+int scoring_level = NONE;
+int scoring_slot = NONE;
 
 //---------------------------------------------------------------------
 
@@ -44,66 +67,18 @@ int APIENTRY WinMain(HINSTANCE hInstance,
     DWORD result;
 	MSG   msg;
 
+	tests = sizeof(test) / 3;
+
 	hDialog = CreateDialog(hInstance, (LPCTSTR)IDD_MAIN, NULL, DialogProc);
 
 	ShowWindow(hDialog, SW_NORMAL);
 
 	//put numbers in edit boxes
 	HWND hList;
-	hList = GetDlgItem(hDialog, IDC_JoyX);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"0");
-	hList = GetDlgItem(hDialog, IDC_JoyY);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"0");
-	hList = GetDlgItem(hDialog, IDC_JoyZ);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"0");
-	hList = GetDlgItem(hDialog, IDC_JoyZr);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"0");
-	hList = GetDlgItem(hDialog, IDC_JoySlider);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"0");
-	hList = GetDlgItem(hDialog, IDC_JoyGame1);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"0");
-	hList = GetDlgItem(hDialog, IDC_JoyGame2);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"0");
-	hList = GetDlgItem(hDialog, IDC_JoyGame3);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"0");
-	hList = GetDlgItem(hDialog, IDC_JoyGame4);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"0");
-	hList = GetDlgItem(hDialog, IDC_JoyHat);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"8");
 
-	hList = GetDlgItem(hDialog, IDC_MouseButtons);
+	hList = GetDlgItem(hDialog, IDC_TXTBL); // Key ID
 	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"0");
-	hList = GetDlgItem(hDialog, IDC_MouseX);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"15");
-	hList = GetDlgItem(hDialog, IDC_MouseY);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"15");
-	hList = GetDlgItem(hDialog, IDC_MouseWheel);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"0");
-
-	hList = GetDlgItem(hDialog, IDC_TxtMultiHi);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"00");
-	hList = GetDlgItem(hDialog, IDC_TxtMultiLo);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"E2");
-
-	hList = GetDlgItem(hDialog, IDC_TXTBL);
-	if (hList == NULL) return 0;
-	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"0");
+	SendMessage(hList, WM_SETTEXT, 0, (LPARAM)(LPCTSTR)"1");
 
 	result = GetMessage( &msg, NULL, 0, 0 );
 	while (result != 0)    { 
@@ -190,11 +165,6 @@ int CALLBACK DialogProc(
 			FindAndStart(hwndDlg);
 			return TRUE;
 
-		case IDHALT:
-		    if (hDevice != -1) CloseInterface(hDevice);
-			hDevice = -1;
-			return TRUE;
-
         case IDC_CALLBACK:
 			if (hDevice == -1) return TRUE;
 			//Turn on the data callback
@@ -207,6 +177,13 @@ int CALLBACK DialogProc(
 			}
 			SuppressDuplicateReports(hDevice, true);
 			DisableDataCallback(hDevice, false); //turn on callback in the case it was turned off by some other command
+			ClearLEDs();
+			StartupLEDs();
+			GamePieceLED(CONE);
+			scoring_level = NONE;
+			scoring_slot = NONE;
+			testi = 0;
+			teste = 0;
 			return TRUE;
         
 		case IDC_CLEAR:
@@ -216,29 +193,6 @@ int CALLBACK DialogProc(
 			SendMessage(hList, LB_RESETCONTENT, 0, 0);
 			return TRUE;
 
-		case IDC_UNITID:
-			//this writes the unit ID entered in IDC_EDIT1. 0-255 possible.
-			memset(buffer, 0, 80);
-			for (int i=0;i<36;i++)
-			{
-				buffer[i]=0;
-			}
-			buffer[0]=0;
-			buffer[1]=189;
-			
-			//get text box text
-			hList = GetDlgItem(hDialog, IDC_EDIT1);
-			if (hList == NULL) return TRUE;
-			char UnitID[10];
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)UnitID);
-			buffer[2]= atoi(UnitID);
-			
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-			return TRUE;
 
 		case IDC_CHECK1: //Green LED
 			
@@ -524,36 +478,6 @@ int CALLBACK DialogProc(
 				result = WriteData(hDevice, buffer);
 			}
 			return TRUE;
-		case IDC_TOPID1:
-			//Change to PID 1
-            for (int i=0;i<wlen;i++)
-			{
-				buffer[i]=0;
-			}
-			buffer[0]=0;
-			buffer[1]=204; //0xcc
-			buffer[2]=0; //0=PID 1, 1=PID 2, 2=PID 3, 3=PID 4
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-			return TRUE;
-
-		case IDC_TOPID2:
-			for (int i=0;i<wlen;i++)
-			{
-				buffer[i]=0;
-			}
-			buffer[0]=0;
-			buffer[1]=204; //0xcc
-			buffer[2]=1;   //0=PID 1, 1=PID 2, 2=PID 3, 3=PID 4
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-			return TRUE;
 		case IDC_TOPID3:
 			for (int i=0;i<wlen;i++)
 			{
@@ -567,55 +491,6 @@ int CALLBACK DialogProc(
 			{
 				result = WriteData(hDevice, buffer);
 			}
-			return TRUE;
-		case IDC_TOPID4:
-			//This report available only on v5 firmware and above
-			for (int i=0;i<wlen;i++)
-			{
-				buffer[i]=0;
-			}
-			buffer[0]=0;
-			buffer[1]=204; //0xcc
-			buffer[2]=3;   //0=PID 1, 1=PID 2, 2=PID 3, 3=PID 4
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-			return TRUE;
-		case IDC_Version:
-			//This report available only on v5 firmware and above
-			//Write version, this is a 2 byte number that is available on enumeration.  You must reboot the device to see the 
-            //newly written version!  Requires piehid32.dll to read back version.
-			for (int i=0;i<wlen;i++)
-			{
-				buffer[i]=0;
-			}
-			buffer[0]=0;
-			buffer[1]=195; //0xc3
-			char versionval[10];
-			hList = GetDlgItem(hDialog, IDC_TxtVersion);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)versionval);
-			buffer[2]=(BYTE)atoi(versionval);
-			buffer[3]=(BYTE)(atoi(versionval)>>8);
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-			
-			Sleep(100);
-			//reboot device-must re-enumerate
-			buffer[0]=0;
-			buffer[1]=238; //0xee
-			buffer[2]=0;
-			buffer[3]=0;
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-
 			return TRUE;
 		case IDC_TIMESTAMP:
 			//Sending this command will turn off the 4 bytes of data which assembled give the time in ms from the start of the computer
@@ -650,272 +525,6 @@ int CALLBACK DialogProc(
 				result = WriteData(hDevice, buffer);
 			}
 			return TRUE;
-
-		case IDC_KEYREFLECT:
-			//Sends keyboard commands as a native keyboard to textbox
-			hList = GetDlgItem(hDialog, IDC_EDIT2);
-			if (hList == NULL) return TRUE;
-			SetFocus(hList);
-			for(int i=0;i<wlen;i++)
-			{
-				buffer[i]=0;
-			}
-			buffer[0]=0;
-			buffer[1]=201;
-			buffer[2]=2; //modifiers Bit 1=Left Ctrl, bit 2=Left Shift, bit 3=Left Alt, bit 4=Left Gui, bit 5=Right Ctrl, bit 6=Right Shift, bit 7=Right Alt, bit 8=Right Gui.
-			buffer[3]=0; //always 0
-			buffer[4]=0x04; //1st hid code a, down
-			buffer[5]=0; //2nd hid code
-			buffer[6]=0; //3rd hid code
-			buffer[7]=0; //4th hid code
-			buffer[8]=0; //5th hid code
-			buffer[9]=0; //6th hid code
-			result=404;
-			while(result==404)
-			{
-				result=WriteData(hDevice, buffer);
-			}
-			//Sleep(100);
-			buffer[0]=0;
-			buffer[1]=201;
-			buffer[2]=0; //modifiers Bit 1=Left Ctrl, bit 2=Left Shift, bit 3=Left Alt, bit 4=Left Gui, bit 5=Right Ctrl, bit 6=Right Shift, bit 7=Right Alt, bit 8=Right Gui.
-			buffer[3]=0; //always 0
-			buffer[4]=0; //1st hid code a up
-			buffer[5]=0x05; //2nd hid code b down
-			buffer[6]=0x06; //3rd hid code c down
-			buffer[7]=0x07; //4th hid code d down
-			buffer[8]=0; //5th hid code
-			buffer[9]=0; //6th hid code
-			result=404;
-			while(result==404)
-			{
-				result=WriteData(hDevice, buffer);
-			}
-			//Sleep(100);
-			buffer[0]=0;
-			buffer[1]=201;
-			buffer[2]=0; //modifiers Bit 1=Left Ctrl, bit 2=Left Shift, bit 3=Left Alt, bit 4=Left Gui, bit 5=Right Ctrl, bit 6=Right Shift, bit 7=Right Alt, bit 8=Right Gui.
-			buffer[3]=0; //always 0
-			buffer[4]=0; //1st hid code 
-			buffer[5]=0; //2nd hid code b up
-			buffer[6]=0; //3rd hid code c up
-			buffer[7]=0; //4th hid code d up
-			buffer[8]=0; //5th hid code
-			buffer[9]=0; //6th hid code
-			result=404;
-			while(result==404)
-			{
-				result=WriteData(hDevice, buffer);
-			}
-			//Sleep(100);
-			return TRUE;
-
-		case IDC_JOYREFLECT:
-			//open up the game controller control panel to test these features, after clicking this button
-            //go and make active the control panel properties and change will occur
-			//only available in PID #1 and PID #3
-			for (int i=0;i<wlen;i++)
-			{
-				buffer[i]=0;
-			}
-			buffer[0]=0;
-			buffer[1]=202;
-			
-			char joyval[10];
-			hList = GetDlgItem(hDialog, IDC_JoyX);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)joyval);
-			buffer[2]=atoi(joyval)^127-255; //X, 0 to 127 from center to right, 255 to 128 from center to left
-			hList = GetDlgItem(hDialog, IDC_JoyY);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)joyval);
-			buffer[3]=atoi(joyval)^127; //Y, 0 to 127 from center down, 255 to 128 from center up
-			hList = GetDlgItem(hDialog, IDC_JoyZr);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)joyval);
-			buffer[4]=atoi(joyval)^127; //Z rotation, 0 to 127 from center down, 255 to 128 from center up
-			hList = GetDlgItem(hDialog, IDC_JoyZ);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)joyval);
-			buffer[5]=atoi(joyval)^127; //Z, 0 to 127 from center down, 255 to 128 from center up
-			hList = GetDlgItem(hDialog, IDC_JoySlider);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)joyval);
-			buffer[6]=atoi(joyval)^127; //Slider, 0 to 127 from center down, 255 to 128 from center up
-			
-			hList = GetDlgItem(hDialog, IDC_JoyGame1);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)joyval);
-			buffer[7]=atoi(joyval); //buttons 1-8, where bit 1 is button 1, bit 2 is button 2
-			hList = GetDlgItem(hDialog, IDC_JoyGame2);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)joyval);
-			buffer[8]=atoi(joyval); //buttons 9-16, where bit 1 is button 1, bit 2 is button 2
-			hList = GetDlgItem(hDialog, IDC_JoyGame3);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)joyval);
-			buffer[9]=atoi(joyval); //buttons 17-24, where bit 1 is button 1, bit 2 is button 2
-			hList = GetDlgItem(hDialog, IDC_JoyGame4);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)joyval);
-			buffer[10]=atoi(joyval); //buttons 25-32, where bit 1 is button 1, bit 2 is button 2
-			
-			buffer[11]=0;
-
-			hList = GetDlgItem(hDialog, IDC_JoyHat);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)joyval);
-			buffer[12]=atoi(joyval); //hat, where 0 is straight up, 1 is 45deg cw, etc and 8 is no hat
-			
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-			return TRUE;
-
-	    case IDC_MOUSEREFLECT3:
-			for (int i=0;i<wlen;i++)
-			{
-				buffer[i]=0;
-			}
-			buffer[0]=0;
-			buffer[1]=203;
-			
-			char val[10];
-			hList = GetDlgItem(hDialog, IDC_MouseButtons);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)val);
-			buffer[2]=atoi(val); //1=left, 2=right, 4=center, 8=XButton1, 16=XButton2
-			hList = GetDlgItem(hDialog, IDC_MouseX);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)val);
-			buffer[3]=atoi(val); //X motion, 128=0 no motion, 1-127 is right, 255-129=left, finest inc (1 and 255) to coarsest (127 and 129)
-			hList = GetDlgItem(hDialog, IDC_MouseY);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)val);
-			buffer[4]=atoi(val); //Y motion, 128=0 no motion, 1-127 is down, 255-129=up, finest inc (1 and 255) to coarsest (127 and 129)
-			buffer[5]=0; //Wheel X
-			hList = GetDlgItem(hDialog, IDC_MouseWheel);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)val);
-			buffer[6]=atoi(val); //Wheel Y, 128=0 no motion, 1-127 is up, 255-129=down, finest inc (1 and 255) to coarsest (127 and 129).
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-			return TRUE;
-		case IDC_Multimedia:
-			//This report available only on v5 firmware and above
-			//Many multimedia commands require the app to have focus to work.  Some that don't are Mute (E2), Volume Increment (E9), Volume Decrement (EA)
-            //The Multimedia reflector is mainly designed to be used as hardware mode macros.
-            //Some common multimedia codes
-            //Scan Next Track	00B5
-            //Scan Previous Track	00B6
-            //Stop	00B7
-            //Play/Pause	00CD
-            //Mute	00E2
-            //Bass Boost	00E5
-            //Loudness	00E7
-            //Volume Up	00E9
-            //Volume Down	00EA
-            //Bass Up	0152
-            //Bass Down	0153
-            //Treble Up	0154
-            //Treble Down	0155
-            //Media Select	0183
-            //Mail	018A
-            //Calculator	0192
-            //My Computer	0194
-            //Search	0221
-            //Home	0223
-            //Back	0224
-            //Forward	0225
-            //Stop	0226
-            //Refresh	0227
-            //Favorites	022A
-			for (int i=0;i<wlen;i++)
-			{
-				buffer[i]=0;
-			}
-			buffer[0]=0;
-			buffer[1]=225; //0xe1
-			
-			char val2[10];
-			hList = GetDlgItem(hDialog, IDC_TxtMultiLo);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)val2);
-			//convert the hex strings to number
-			
-			buffer[2]=strtol(val2, &p, 16); //Usage ID lo byte see hut1_12.pdf, pages 75-85 Consumer Page
-			hList = GetDlgItem(hDialog, IDC_TxtMultiHi);
-			SendMessage(hList, WM_GETTEXT, 8, (LPARAM)val2);
-			buffer[3]=strtol(val2, &p, 16); //Usage ID hi byte see hut1_12.pdf, pages 75-85 Consumer Page
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-
-			buffer[2]=0; //terminate
-			buffer[3]=0; //terminate
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-			//note when the "terminate" command is sent can sometimes have an effect on the behavior of the command
-			//for example in volume decrement (EA=lo byte, 00=hi byte) if you send the terminate immediately after the e1 command it will
-			//decrement the volume one step, if you send the e1 on the press and the terminate on the release the volume will continuously
-			//decrement until the key is released.
-			return TRUE;
-		case IDC_MyComputer:
-			//This report available only on v5 firmware and above
-			for (int i=0;i<wlen;i++)
-			{
-				buffer[i]=0;
-			}
-			buffer[0]=0;
-			buffer[1]=225; //0xe1
-			buffer[2]=strtol("94", &p, 16); //Usage ID lo byte see hut1_12.pdf, pages 75-85 Consumer Page
-			buffer[3]=strtol("01", &p, 16); //Usage ID hi byte see hut1_12.pdf, pages 75-85 Consumer Page
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-
-			buffer[2]=0; //terminate
-			buffer[3]=0; //terminate
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-			return TRUE;
-		case IDC_GENERATE:
-			DisableDataCallback(hDevice, false); //turn on callback in the case it was turned off by some other command
-			for (int i=0;i<wlen;i++)
-			{
-				buffer[i]=0;
-			}
-			buffer[0]=0;
-			buffer[1]=177;
-			
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-			return TRUE;
-		case IDC_CUSTOM:
-			//This report available only on v5 firmware and above
-			//After sending this command a custom incoming data report will be given with
-            //the 3rd byte (Data Type) set to 0xE0, the 4th byte set to the count given below when the command was sent
-            //and the following bytes whatever the user wishes.  In this example we are send 3 bytes; 1, 2, 3
-			DisableDataCallback(hDevice, false); //turn on callback in the case it was turned off by some other command
-			for (int i=0;i<wlen;i++)
-			{
-				buffer[i]=0;
-			}
-			buffer[0]=0;
-			buffer[1]=224;
-			buffer[2] = 3; //count of bytes to follow
-            buffer[3] = 1; //1st custom byte
-            buffer[4] = 2; //2nd custom byte
-            buffer[5] = 3; //3rd custom byte
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-			return TRUE;
 		case IDC_SETKEY:
 			//for users of the dongle feature only, set the dongle key here REMEMBER there 4 numbers, they are needed to check the dongle key
 			 //This routine is done once per unit by the developer prior to sale.
@@ -941,192 +550,7 @@ int CALLBACK DialogProc(
 				result = WriteData(hDevice, buffer);
 			}
 			return TRUE;
-		case IDC_CHECKKEY:
-			{
-			//This is done within the developer's application to check for the correct
-            //hardware.  The K0-K3 values must be the same as those entered in Set Key.
-            if (hDevice == -1) return TRUE;
-			//check hardware
-
-			//IMPORTANT turn off the callback if going so data isn't grabbed there, turn it back on later (not done here)
-			DisableDataCallback(hDevice, true);
-			
-            //randomn numbers
-            int N0 = 3;   //pick any number between 1 and 254
-            int N1 = 1;   //pick any number between 1 and 254
-            int N2 = 4;   //pick any number between 1 and 254
-            int N3 = 1;   //pick any number between 1 and 254
-
-            //this is the key from set key
-            K0 = 7;
-            K1 = 58;
-            K2 = 33;
-            K3 = 243;
-			
-			//hash, will use these for comparison later
-            int R0;
-            int R1;
-            int R2;
-            int R3;
-			DongleCheck2(K0, K1, K2, K3, N0, N1, N2, N3, R0, R1, R2, R3);
-
-			for (int i=0;i<wlen;i++)
-			{
-				buffer[i]=0;
-			}
-			buffer[0]=0;
-			buffer[1]=193;  //0xc1 check dongle key command
-			buffer[2]=N0;
-			buffer[3]=N1;
-			buffer[4]=N2;
-			buffer[5]=N3;
-			
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-			//after this write the next read beginning with 3rd byte = 193 will give 4 values which are used below for comparison
-			for (int i=0;i<80;i++)
-			{buffer[i]=0;}
-			
-			int countout=0;
-			int result = BlockingReadData(hDevice, buffer, 100);
-			
-			while (result == 304 || (result == 0 && buffer[2] != 193))
-			{
-				if (result == 304)
-				{
-					// No data received after 100ms, so increment countout extra
-					countout += 99;
-				}
-				countout++;
-				if (countout > 1000) //increase this if have to check more than once
-					break;
-				result = BlockingReadData(hDevice, buffer, 100);
-			}
-
-			if (result ==0 && buffer[2]==193)
-			{
-				bool fail=false;
-				if (R0!=buffer[3]) fail=true;
-				if (R1!=buffer[4]) fail=true;
-				if (R2!=buffer[5]) fail=true;
-				if (R3!=buffer[6]) fail=true;
-				hList = GetDlgItem(hDialog, IDC_PASSFAIL);
-				if (hList == NULL) return TRUE;
-				
-				if (fail==false)
-				{
-					char msg[100]="Pass-Correct hardware found";
-					SendMessage(hList, WM_SETTEXT,NULL , (LPARAM)msg);
-					//MessageBeep(MB_ICONHAND);
-				}
-				else
-				{
-					char msg[100]="Fail-Correct not hardware found";
-					SendMessage(hList, WM_SETTEXT,NULL , (LPARAM)msg);
-					//MessageBeep(MB_ICONHAND);
-				}
-			}
-			}
-
-			return TRUE;
-		case IDC_DESCRIPTOR:
-			if (hDevice == -1) return TRUE;
-			//turn off callback
-			DisableDataCallback(hDevice, true); //turn off callback so capture data here
 		
-			for (int i=0;i<wlen;i++)
-			{
-				buffer[i]=0;
-			}
-			buffer[0]=0;
-			buffer[1]=214;
-			result=404;
-			while (result==404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
-			//after this write the next read 3rd byte=214 will give descriptor information
-			for (int i=0;i<80;i++)
-			{buffer[i]=0;}
-			
-			
-			result = BlockingReadData(hDevice, buffer, 100);
-			
-			while (result == 304 || (result == 0 && buffer[2] != 214))
-			{
-				if (result == 304)
-				{
-					// No data received after 100ms, so increment countout extra
-					countout += 99;
-				}
-				countout++;
-				if (countout > 1000) //increase this if have to check more than once
-					break;
-				result = BlockingReadData(hDevice, buffer, 100);
-			}
-			
-			if (result ==0 && buffer[2]==214)
-			{
-				char dataStr[256];
-				//clear out listbox
-				hList = GetDlgItem(hDialog, ID_EVENTS);
-				if (hList == NULL) return TRUE;
-				SendMessage(hList, LB_RESETCONTENT, 0, 0);
-
-				if (buffer[3]==0) AddEventMsg(hDialog, "PID #1");
-				else if (buffer[3]==2) AddEventMsg(hDialog, "PID #2");
-				
-				_itoa_s(buffer[4],dataStr,10);
-				char str[80];
-				strcpy_s (str,"Keymapstart ");
-				strcat_s (str,dataStr);
-				AddEventMsg(hDialog, str);
-
-				_itoa_s(buffer[5],dataStr,10);
-				strcpy_s (str,"Layer2offset ");
-				strcat_s (str,dataStr);
-				AddEventMsg(hDialog, str);
-
-				_itoa_s(buffer[6],dataStr,10);
-				strcpy_s (str,"OutSize ");
-				strcat_s (str,dataStr);
-				AddEventMsg(hDialog, str);
-
-				_itoa_s(buffer[7],dataStr,10);
-				strcpy_s (str,"ReportSize ");
-				strcat_s (str,dataStr);
-				AddEventMsg(hDialog, str);
-				
-				_itoa_s(buffer[8],dataStr,10);
-				strcpy_s (str,"MaxCol ");
-				strcat_s (str,dataStr);
-				AddEventMsg(hDialog, str);
-
-				_itoa_s(buffer[9],dataStr,10);
-				strcpy_s (str,"MaxRow ");
-				strcat_s (str,dataStr);
-				AddEventMsg(hDialog, str);
-
-				strcpy_s (str,"");
-				if (buffer[10]&64) strcpy_s (str,"Green LED ");
-				if (buffer[10]&128) strcat_s (str,"Red LED ");
-				if (strlen(str)==0) strcpy_s (str,"None ");
-				AddEventMsg(hDialog, str);
-
-				_itoa_s(buffer[11],dataStr,10);
-				strcpy_s (str,"Firmware Version ");
-				strcat_s (str,dataStr);
-				AddEventMsg(hDialog, str);
-			
-				_itoa_s((buffer[13]*256+buffer[12]),dataStr,10);
-				strcpy_s (str, "PID=");
-				strcat_s(str, dataStr);
-				AddEventMsg(hDialog, str);
-			}
-			return TRUE;
 
 		
 		default:
@@ -1146,7 +570,7 @@ void FindAndStart(HWND hDialog)
 {
 	DWORD result;
 	//long  deviceData[MAXDEVICES];  
-	TEnumHIDInfo info[128];
+	TEnumHIDInfo info[MAXDEVICES];
 	long  hnd;
 	long  count;
 	int pid;
@@ -1174,7 +598,7 @@ void FindAndStart(HWND hDialog)
 		return;
 	}
 
-	for (int i=0;i<128;i++)combotodevice[i]=-1;
+	for (int i=0;i< MAXDEVICES;i++)combotodevice[i]=-1;
 	int cbocount=0;
 
 	for (long i=0; i<count; i++)    {
@@ -1307,12 +731,6 @@ void AddEventMsg(HWND hDialog, char *msg)
 DWORD __stdcall HandleDataEvent(UCHAR *pData, DWORD deviceID, DWORD error)
 {
 	
-	char dataStr[256];
-	sprintf_s(dataStr, "ID%02x : %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n", 
-		deviceID, pData[0], pData[1], pData[2], pData[3], pData[4], pData[5], pData[6], pData[7], pData[8], pData[9], pData[10], pData[11], pData[12], pData[13], pData[14], pData[15], pData[16], pData[17], pData[18], pData[19], pData[20], pData[21], pData[22], pData[23],pData[24], pData[25], pData[26], pData[27], pData[28], pData[29], pData[30], pData[31], pData[32]);
-
-	AddEventMsg(hDialog, dataStr);
-
 	//Read Unit ID
 	HWND hList = GetDlgItem(hDialog, IDC_UNITID3);
 	if (hList == NULL) return TRUE;
@@ -1332,6 +750,10 @@ DWORD __stdcall HandleDataEvent(UCHAR *pData, DWORD deviceID, DWORD error)
 	buffer[0] = 0;
 	buffer[1] = 202;
 
+	bool entered = false;
+	char level = scoring_level;
+	char slot = scoring_slot;
+
 	//Buttons
 	int maxcols=10;
 	int maxrows=8;
@@ -1339,7 +761,7 @@ DWORD __stdcall HandleDataEvent(UCHAR *pData, DWORD deviceID, DWORD error)
 	{
 		for (int j=0;j<maxrows;j++) //loop for each row of button data (Max Rows)
 		{
-			int temp1=pow(2.0,j);
+			int temp1= 1<<j;
 			int keynum=maxrows*i+j; //0 based index
 
 			int state=0; //0=was up and is up, 1=was up and is down, 2= was down and is down, 3=was down and is up 
@@ -1351,871 +773,60 @@ DWORD __stdcall HandleDataEvent(UCHAR *pData, DWORD deviceID, DWORD error)
 				state=3;
 
 			
-			if(state == 1) buffer[7] = keynum+1;
-			result = 404;
-			while (result == 404)
-			{
-				result = WriteData(hDevice, buffer);
-			}
+			
+			
 			
 			//Perform action based on key number, consult P.I. Engineering SDK documentation for the key numbers
-            switch (keynum)
-			{
-				case 0: //button 0 (top left)
-
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-						//buffer[7] = 15;
-
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-
-						//buffer[7] = 255-15;
-					}
-				case 1: //button 1
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 2: //button 2
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 3: //button 3
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 4: //button 4
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 5: //button 5
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 6: //button 6
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 7: //button 7 
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				//Next column of buttons
-				case 8: //button 8
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 9: //button 9
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 10: //button 10
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 11: //button 11
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 12: //button 12
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 13: //button 13
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 14: //button 14
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 15: //button 15
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				//Next column of buttons
-				case 16: //button 16
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 17: //button 17
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 18: //button 18
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 19: //button 19
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 20: //button 20
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 21: //button 21
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 22: //button 22
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 23: //button 23
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				//Next column of buttons
-				case 24: //button 24
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 25: //button 25
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 26: //button 26
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 27: //button 27
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 28: //button 28
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 29: //button 29
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 30: //button 30
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 31: //button 31
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				//Next column of buttons
-				case 32: //button 32
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 33: //button 33
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 34: //button 34
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 35: //button 35
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				//Next column of buttons                             
-				case 36: //button 36
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 37: //button 37
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 38: //button 38
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-
-				case 39: //button 39
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				//Next column of buttons  
-				case 40: //button 40
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 41: //button 41
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 42: //button 42
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 43: //button 43
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 44: //button 44
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 45: //button 45
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 46: //button 46
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 47: //button 47
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				//Next column of buttons		     
-				case 48: //button 48
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 49: //button 49
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 50: //button 50
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 51: //button 51
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 52: //button 52
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 53: //button 53
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-
-				case 54: //button 54
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 55: //button 55
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				//Next column of buttons
-				case 56: //button 56
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 57: //button 57
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 58: //button 58
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 59: //button 59
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 60: //button 60
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 61: //button 61
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 62: //button 62
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 63: //button 63
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				//Next column of buttons
-				case 64: //button 64
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 65: //button 65
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 66: //button 66
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 67: //button 67
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 68: //button 68
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 69: //button 69
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 70: //button 70
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 71: //button 71
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				//Next column of buttons
-				case 72: //button 72
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 73: //button 73
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 74: //button 74
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 75: //button 75
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 76: //button 76
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 77: //button 77
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 78: //button 78
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				case 79: //button 79
-					if (state == 1) //key was pressed
-					{
-						//do press actions
-					}
-					else if (state == 3) //key was released
-					{
-						//do release action
-					}
-					break;
-				//Next column of buttons
-
+			if (state != 1) {
+				continue;
 			}
+
+
+			if (keynum == K_CONE) GamePieceLED(CONE);
+			else if (keynum == K_CUBE) GamePieceLED(CUBE);
+
+			if (keynum == K_LOW) level=LOW;
+			else if (keynum == K_MID) level=MID;
+			else if (keynum == K_HIGH) level=HIGH;
+
+			if (keynum == K_ONE) slot = ONE;
+			else if (keynum == K_TWO) slot = TWO;
+			else if (keynum == K_THREE) slot = THREE;
+			else if (keynum == K_FOUR) slot = FOUR;
+			else if (keynum == K_FIVE) slot = FIVE;
+			else if (keynum == K_SIX) slot = SIX;
+			else if (keynum == K_SEVEN) slot = SEVEN;
+			else if (keynum == K_EIGHT) slot = EIGHT;
+			else if (keynum == K_NINE) slot = NINE;
+
+			
+			if (keynum == K_ENTER1 || keynum == K_ENTER2) entered = true;
 				
 		}
 	}
+
+	buffer[1] = 202;
+	buffer[7] = game_piece;
+	if (scoring_level) buffer[7] |= 1 << (1 + scoring_level);
+	if (scoring_slot) {
+		buffer[7] |= 1 << (scoring_slot + 4);
+		buffer[8] |= 1 << (scoring_slot - 4);
+	}
+
+	FastWrite(hDevice, buffer);
+
+	SlotLED(slot);
+	LevelLED(level);
+
+
+	if (entered) TestEntry();
 
 	for (int i=0;i<readlength;i++)
 	{
 		lastpData[i]=pData[i];  //save it for comparison on next read
 	}
 	//end Buttons
+
 	
 	//error handling
 	if (error==307)
@@ -2236,3 +847,141 @@ DWORD __stdcall HandleErrorEvent(DWORD deviceID, DWORD status)
 	return TRUE;
 }
 //------------------------------------------------------------------------
+
+void GamePieceLED(char gp) {
+	game_piece = gp;
+	buffer[1] = 186;
+	buffer[2] = game_piece << 6;
+	buffer[3] = 0;
+	FastWrite(hDevice, buffer);
+}
+
+void LevelLED(char sl) {
+	if (!sl) return;
+	char offset = K_HIGH - HIGH;
+	if (scoring_level) {
+		buffer[1] = 181;
+		buffer[2] = scoring_level + 8 + offset;
+		buffer[3] = 0;
+		buffer[4] = 0;
+		FastWrite(hDevice, buffer);
+		buffer[2] = scoring_level + 88 + offset;
+		FastWrite(hDevice, buffer);
+	}
+	scoring_level = sl;
+	buffer[2] = game_piece == CUBE ? scoring_level + 8 + offset : scoring_level + 88 + offset;
+	buffer[3] = 1;
+	FastWrite(hDevice, buffer);
+}
+
+void SlotLED(char ss) {
+	if (!ss) return;
+	buffer[1] = 181;
+	buffer[4] = 0;
+	if (scoring_slot) {
+		buffer[2] = scoring_slot * 8 + 1;
+		buffer[3] = 0;
+		FastWrite(hDevice, buffer);
+		buffer[2] = scoring_slot * 8 + 81;
+		FastWrite(hDevice, buffer);
+	}
+	scoring_slot = ss;
+	buffer[2] = 1 + (game_piece == CUBE ? scoring_slot * 8 : scoring_slot * 8 + 80);
+	buffer[3] = 1;
+	FastWrite(hDevice, buffer);
+}
+
+void ClearLEDs() {
+	for (int i = 0; i < 80; i++) {
+		buffer[1] = 181;
+		buffer[2] = i;
+		buffer[3] = 0;
+		buffer[4] = 0;
+		SlowWrite(hDevice, buffer);
+		buffer[2] = i + 80;
+		SlowWrite(hDevice, buffer);
+	}
+}
+
+void StartupLEDs() {
+	buffer[1] = 181;
+	buffer[2] = K_CONE + 80;
+	buffer[3] = 1;
+	buffer[4] = 0;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_CUBE;
+	SlowWrite(hDevice, buffer);
+
+	buffer[2] = K_HIGH;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_HIGH+80;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_MID;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_MID+80;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_LOW;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_LOW+80;
+	SlowWrite(hDevice, buffer);
+
+
+	buffer[2] = K_ONE + 80;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_TWO;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_THREE + 80;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_FOUR + 80;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_FIVE;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_SIX + 80;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_SEVEN + 80;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_EIGHT;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_NINE + 80;
+	SlowWrite(hDevice, buffer);
+
+
+	buffer[2] = K_ENTER1;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_ENTER1 + 80;
+	SlowWrite(hDevice, buffer); 
+	buffer[2] = K_ENTER2;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_ENTER2 + 80;
+	SlowWrite(hDevice, buffer);
+
+
+}
+
+
+void SlowWrite(long hnd, UCHAR* data) {
+	DWORD result = 404;
+	while (result == 404)
+	{
+		result = WriteData(hnd, data);
+	}
+}
+
+
+void TestEntry() {
+	char dataStr[256];
+	if (testi < tests) {
+		if (game_piece == test[testi * 3] && scoring_level == test[1 + testi * 3] && scoring_slot == test[2 + testi * 3]) {
+			testi++;
+		}   else {
+			teste++;
+		}
+		sprintf_s(dataStr, "Correct - Wrong: %d - %d", testi, teste);
+	}	else {
+		sprintf_s(dataStr, "Test is over, Final Score: %d - %d", testi, teste);
+	}
+
+
+	AddEventMsg(hDialog, dataStr);
+
+}

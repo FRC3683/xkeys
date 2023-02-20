@@ -12,10 +12,20 @@
 
 
 char test[] = {
-	CONE, HIGH, ONE,
-	CUBE, MID, EIGHT,
-	CUBE, LOW, FIVE,
-	CONE, HIGH, FOUR,
+	CONE, HIGH, 2,
+	CONE, MID, 5,
+	CUBE, HIGH, 4,
+	CONE, LOW, 3,
+	CUBE, LOW, 6,
+	CUBE, HIGH, 8,
+	CUBE, MID, 3,
+	CONE, LOW, 9,
+	CUBE, HIGH, 7,
+	CONE, HIGH, 3,
+	CUBE, MID, 1,
+	CONE, LOW, 3,
+	CONE, MID, 2,
+	CONE, MID, 3,
 };
 
 int testi = 0;
@@ -975,6 +985,7 @@ void TestEntry() {
 			testi++;
 		}   else {
 			teste++;
+			testi++;
 		}
 		sprintf_s(dataStr, "Correct - Wrong: %d - %d", testi, teste);
 	}	else {

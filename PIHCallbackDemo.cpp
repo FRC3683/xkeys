@@ -53,6 +53,7 @@ void LevelLED(char sl);
 void SlotLED(char ss);
 void ClearLEDs();
 void StartupLEDs();
+void SendToDS();
 void SlowWrite(long hnd, UCHAR* data);
 void TestEntry();
 
@@ -190,8 +191,10 @@ int CALLBACK DialogProc(
 			ClearLEDs();
 			StartupLEDs();
 			GamePieceLED(CONE);
-			scoring_level = NONE;
-			scoring_slot = NONE;
+			scoring_level = HIGH;
+			scoring_slot = ONE;
+			LevelLED(scoring_level);
+			SlotLED(scoring_slot);
 			testi = 0;
 			teste = 0;
 			return TRUE;
@@ -815,13 +818,11 @@ DWORD __stdcall HandleDataEvent(UCHAR *pData, DWORD deviceID, DWORD error)
 		}
 	}
 
+
 	buffer[1] = 202;
-	buffer[7] = game_piece;
-	if (scoring_level) buffer[7] |= 1 << (1 + scoring_level);
-	if (scoring_slot) {
-		buffer[7] |= 1 << (scoring_slot + 4);
-		buffer[8] |= 1 << (scoring_slot - 4);
-	}
+	//buffer[7] = game_piece | 1 << (1 + scoring_level) | 1 << (4 + scoring_slot);
+	//buffer[8] = 1 << (scoring_slot - 4);
+	buffer[7] = (game_piece-1) | (((scoring_slot - 1) * 3 + (scoring_level - 1)) << 1);
 
 	FastWrite(hDevice, buffer);
 
@@ -913,6 +914,11 @@ void ClearLEDs() {
 	}
 }
 
+void SendToDS() {
+	buffer[1] = 202;
+	buffer[7] |= game_piece | ((scoring_slot-1) * 3 + (scoring_level-1));
+}
+
 void StartupLEDs() {
 	buffer[1] = 181;
 	buffer[2] = K_CONE + 80;
@@ -965,7 +971,7 @@ void StartupLEDs() {
 	buffer[2] = K_ENTER2 + 80;
 	SlowWrite(hDevice, buffer);
 
-
+	
 }
 
 

@@ -27,14 +27,10 @@ void AddDevices(HWND hDialog, char *msg);
 DWORD __stdcall HandleDataEvent(UCHAR *pData, DWORD deviceID, DWORD error);
 DWORD __stdcall HandleErrorEvent(DWORD deviceID, DWORD status);
 
-void GamePieceLED(char gp);
-void LevelLED(char sl);
-void SlotLED(char ss);
 void ClearLEDs();
-void StateLEDs();
 void SendToDS();
+void StateLEDs();
 void SlowWrite(long hnd, UCHAR* data);
-void TestEntry();
 
 BYTE buffer[80];  //used for writing to device
 BYTE lastpData[80];  //stores the data of the previous read
@@ -43,9 +39,11 @@ int readlength=0;
 HWND hDialog;
 long hDevice = -1;
 int combotodevice[MAXDEVICES];
-int game_piece = CONE;
-int scoring_level = NONE;
-int scoring_slot = NONE;
+bool flash_cone = false;
+bool flash_cube = false;
+int scoring_level = HIGH;
+int scoring_offset = CENTER;
+int scoring_slot = ONE;
 
 bool autominus = false;
 bool autoplus = false;
@@ -64,6 +62,30 @@ bool wrsd = false;
 bool intu = false;
 bool intd = false;
 
+
+void Reset() {
+	ClearLEDs();
+	scoring_level = HIGH;
+	scoring_slot = ONE;
+	autominus = false;
+	autoplus = false;
+	score = false;
+	conebeam = false;
+	cubebeam = false;
+	stopEE = false;
+	zero = false;
+
+	escu = false;
+	escd = false;
+	lnxu = false;
+	lnxd = false;
+	wrsu = false;
+	wrsd = false;
+	intu = false;
+	intd = false;
+	SendToDS();
+	StateLEDs();
+}
 
 
 //---------------------------------------------------------------------
@@ -185,27 +207,8 @@ int CALLBACK DialogProc(
 			}
 			SuppressDuplicateReports(hDevice, true);
 			DisableDataCallback(hDevice, false); //turn on callback in the case it was turned off by some other command
-			ClearLEDs();
-			GamePieceLED(CONE);
-			scoring_level = HIGH;
-			scoring_slot = ONE;
-			autominus = false;
-			autoplus = false;
-			score = false;
-			conebeam = false;
-			cubebeam = false;
-			stopEE = false;
-			zero = false;
-
-			escu = false;
-			escd = false;
-			lnxu = false;
-			lnxd = false;
-			wrsu = false;
-			wrsd = false;
-			intu = false;
-			intd = false;
-			StateLEDs();
+			
+			Reset();
 			return TRUE;
         
 		case IDC_CLEAR:
@@ -801,166 +804,342 @@ DWORD __stdcall HandleDataEvent(UCHAR *pData, DWORD deviceID, DWORD error)
 
 			//Perform action based on key number, consult P.I. Engineering SDK documentation for the key numbers
 
-			
-
-			if (state == 1){
-				if (keynum == K_CONE) { 
-					GamePieceLED(CONE);
-				key = keynum;
+			switch (keynum) {
+			case K_CONE:
+				if (state == 1) {
+					flash_cone = true;
+					key = keynum;
 				}
-				else if (keynum == K_CUBE) { 
-					GamePieceLED(CUBE);
-				key = keynum;
+				else if (state == 3) {
+					flash_cone = false;
+					last_key = keynum;
 				}
+				break;
 
-				if (keynum == K_LOW) {
+			case K_CUBE:
+				if (state == 1) {
+					flash_cube = true;
+					key = keynum;
+				}
+				else if (state == 3) {
+					flash_cube = false;
+					last_key = keynum;
+				}
+				break;
+
+			case K_LOW:
+				if (state == 1) {
 					scoring_level = LOW;
 					key = keynum;
 				}
-				else if (keynum == K_MID) {
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_MID:
+				if (state == 1) {
 					scoring_level = MID;
 					key = keynum;
 				}
-				else if (keynum == K_HIGH) {
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_HIGH:
+				if (state == 1) {
 					scoring_level = HIGH;
 					key = keynum;
 				}
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
 
-				
-				if (keynum == K_ONE) {
+			case K_CENTER:
+				if (state == 1) {
+					scoring_offset = CENTER;
+					key = keynum;
+				}
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_LEFT:
+				if (state == 1) {
+					scoring_offset = LEFT;
+					key = keynum;
+				}
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_RIGHT:
+				if (state == 1) {
+					scoring_offset = RIGHT;
+					key = keynum;
+				}
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_FAR_LEFT:
+				if (state == 1) {
+					scoring_offset = FAR_LEFT;
+					key = keynum;
+				}
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_FAR_RIGHT:
+				if (state == 1) {
+					scoring_offset = FAR_RIGHT;
+					key = keynum;
+				}
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+
+			case K_ONE:
+				if (state == 1) {
 					scoring_slot = ONE;
 					key = keynum;
-				} 
-				else if (keynum == K_TWO) {
+				}
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_TWO:
+				if (state == 1) {
 					scoring_slot = TWO;
 					key = keynum;
 				}
-				else if (keynum == K_THREE) {
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_THREE:
+				if (state == 1) {
 					scoring_slot = THREE;
 					key = keynum;
 				}
-				else if (keynum == K_FOUR) {
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_FOUR:
+				if (state == 1) {
 					scoring_slot = FOUR;
 					key = keynum;
 				}
-				else if (keynum == K_FIVE) {
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_FIVE:
+				if (state == 1) {
 					scoring_slot = FIVE;
 					key = keynum;
 				}
-				else if (keynum == K_SIX) {
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_SIX:
+				if (state == 1) {
 					scoring_slot = SIX;
 					key = keynum;
 				}
-				else if (keynum == K_SEVEN) {
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_SEVEN:
+				if (state == 1) {
 					scoring_slot = SEVEN;
 					key = keynum;
 				}
-				else if (keynum == K_EIGHT) {
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_EIGHT:
+				if (state == 1) {
 					scoring_slot = EIGHT;
 					key = keynum;
 				}
-				else if (keynum == K_NINE) {
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_NINE:
+				if (state == 1) {
 					scoring_slot = NINE;
 					key = keynum;
 				}
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
 
-				if (keynum == K_CONEBEAM) {
-					conebeam = !conebeam;
-					key = keynum;
-				}
-				if (keynum == K_CUBEBEAM) {
-					cubebeam = !cubebeam;
-					key = keynum;
-				}
-
-				if (keynum == K_AUTOMINUS) {
-					autominus = true;
-					key = keynum;
-				}
-				if (keynum == K_AUTOPLUS) {
+			case K_AUTOPLUS:
+				if (state == 1) {
 					autoplus = true;
 					key = keynum;
 				}
-				if (keynum == K_SCORE) {
+				else if (state == 3) {
+					autoplus = false;
+					last_key = keynum;
+				}
+				break;
+			case K_AUTOMINUS:
+				if (state == 1) {
+					autominus = true;
+					key = keynum;
+				}
+				else if (state == 3) {
+					autominus = false;
+					last_key = keynum;
+				}
+				break;
+			case K_SCORE:
+				if (state == 1) {
 					score = true;
 					key = keynum;
 				}
-				if (keynum == K_STOPEE) {
+				else if (state == 3) {
+					score = false;
+					last_key = keynum;
+				}
+				break;
+			case K_CONEBEAM:
+				if (state == 1) {
+					conebeam = !conebeam;
+					key = keynum;
+				}
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_CUBEBEAM:
+				if (state == 1) {
+					cubebeam = !cubebeam;
+					key = keynum;
+				}
+				else if (state == 3) {
+					last_key = keynum;
+				}
+				break;
+			case K_STOPEE:
+				if (state == 1) {
 					stopEE = true;
-					key = keynum;
 				}
-				if (keynum == K_ZERO) {
+				else if (state == 3) {
+				}
+				break;
+			case K_ZERO:
+				if (state == 1) {
 					zero = true;
+					stopEE = false;
 					key = keynum;
 				}
+				else if (state == 3) {
+					zero = false;
+					last_key = keynum;
+				}
+				break;
 
 
-				if (keynum == K_ESCU){ 
+			case K_ESCU:
+				if (state == 1) {
 					escu = true;
 					key = keynum;
 				}
-				if (keynum == K_ESCD) {
+				else if (state == 3) {
+					escu = false;
+					last_key = keynum;
+				}
+				break;
+			case K_ESCD:
+				if (state == 1) {
 					escd = true;
 					key = keynum;
 				}
-				if (keynum == K_LNXU) {
+				else if (state == 3) {
+					escd = false;
+					last_key = keynum;
+				}
+				break;
+			case K_LNXU:
+				if (state == 1) {
 					lnxu = true;
 					key = keynum;
 				}
-				if (keynum == K_LNXD) {
+				else if (state == 3) {
+					lnxu = false;
+					last_key = keynum;
+				}
+				break;
+			case K_LNXD:
+				if (state == 1) {
 					lnxd = true;
 					key = keynum;
 				}
-				if (keynum == K_WRSU) {
+				else if (state == 3) {
+					lnxd = false;
+					last_key = keynum;
+				}
+				break;
+			case K_WRSU:
+				if (state == 1) {
 					wrsu = true;
 					key = keynum;
 				}
-				if (keynum == K_WRSD) {
+				else if (state == 3) {
+					wrsu = false;
+					last_key = keynum;
+				}
+				break;
+			case K_WRSD:
+				if (state == 1) {
 					wrsd = true;
 					key = keynum;
 				}
-				if (keynum == K_INTU) {
+				else if (state == 3) {
+					wrsd = false;
+					last_key = keynum;
+				}
+				break;
+			case K_INTU:
+				if (state == 1) {
 					intu = true;
 					key = keynum;
 				}
-				if (keynum == K_INTD) {
+				else if (state == 3) {
+					intu = false;
+					last_key = keynum;
+				}
+				break;
+			case K_INTD:
+				if (state == 1) {
 					intd = true;
 					key = keynum;
 				}
+				else if (state == 3) {
+					intd = false;
+					last_key = keynum;
+				}
+				break;
 
-
-				
-			} else if (state == 3) {
-				if (keynum == K_AUTOMINUS) autominus = false;
-				if (keynum == K_AUTOPLUS) autoplus = false;
-				if (keynum == K_SCORE) score = false;
-				if (keynum == K_STOPEE) stopEE = false;
-				if (keynum == K_ZERO) zero = false;
-
-
-				if (keynum == K_ESCU) escu = false;
-				if (keynum == K_ESCD) escd = false;
-				if (keynum == K_LNXU) lnxu = false;
-				if (keynum == K_LNXD) lnxd = false;
-				if (keynum == K_WRSU) wrsu = false;
-				if (keynum == K_WRSD) wrsd = false;
-				if (keynum == K_INTU) intu = false;
-				if (keynum == K_INTD) intd = false;
-
-				last_key = keynum;
-			}
+			default:
+				break;
+			};
 		}
 	}
 
-
-	buffer[1] = 202;
-	//buffer[7] = game_piece | 1 << (1 + scoring_level) | 1 << (4 + scoring_slot);
-	//buffer[8] = 1 << (scoring_slot - 4);
-	buffer[7] = game_piece | ((scoring_slot * 3 + scoring_level) << 1);
-	buffer[8] = score | conebeam << 1 | cubebeam << 2 | stopEE << 3 | zero << 4 | autominus << 5 | autoplus << 6;
-	buffer[9] = escu | escd << 1 | lnxu << 2 | lnxd << 3 | wrsu << 4 | wrsd << 5 | intu << 6 | intd << 7;
-
-	SlowWrite(hDevice, buffer);
+	SendToDS();
+	
 
 
 	if (last_key != -1) {
@@ -1008,48 +1187,25 @@ DWORD __stdcall HandleErrorEvent(DWORD deviceID, DWORD status)
 }
 //------------------------------------------------------------------------
 
-void GamePieceLED(char gp) {
-	game_piece = gp;
-	buffer[1] = 186;
-	buffer[2] = game_piece + 1 << 6;
-	buffer[3] = 0;
-	FastWrite(hDevice, buffer);
+
+void SendToDS() {
+	buffer[1] = 202;
+	buffer[2] = (127 * (1 + escd - escu))^127;
+	buffer[3] = (127 * (1 + lnxd - lnxu))^127;
+	buffer[4] = (127 * (1 + wrsd - wrsu))^127;
+	buffer[7] = flash_cone | flash_cube << 1 | ((scoring_offset * 3 + scoring_level) << 2) | conebeam << 6 | cubebeam << 7;
+	buffer[8] = score | stopEE << 1 | zero << 2 | autoplus << 3 | autominus << 4 | intu << 5 | intd << 6;
+	buffer[12] = scoring_slot;
+
+	//buffer[7] = game_piece | 1 << (1 + scoring_level) | 1 << (4 + scoring_slot);
+	//buffer[8] = 1 << (scoring_slot - 4);
+	//buffer[7] = game_piece | ((scoring_slot * 3 + scoring_level) << 1);
+	//buffer[8] = score | conebeam << 1 | cubebeam << 2 | stopEE << 3 | zero << 4 | autominus << 5 | autoplus << 6;
+	//buffer[9] = escu | escd << 1 | lnxu << 2 | lnxd << 3 | wrsu << 4 | wrsd << 5 | intu << 6 | intd << 7;
+
+	SlowWrite(hDevice, buffer);
 }
 
-void LevelLED(char sl) {
-	if (!sl) return;
-	char offset = K_HIGH - HIGH;
-	if (scoring_level) {
-		buffer[1] = 181;
-		buffer[2] = scoring_level + 8 + offset;
-		buffer[3] = 0;
-		buffer[4] = 0;
-		FastWrite(hDevice, buffer);
-		buffer[2] = scoring_level + 88 + offset;
-		FastWrite(hDevice, buffer);
-	}
-	scoring_level = sl;
-	buffer[2] = game_piece == CUBE ? scoring_level + 8 + offset : scoring_level + 88 + offset;
-	buffer[3] = 1;
-	FastWrite(hDevice, buffer);
-}
-
-void SlotLED(char ss) {
-	if (!ss) return;
-	buffer[1] = 181;
-	buffer[4] = 0;
-	if (scoring_slot) {
-		buffer[2] = scoring_slot * 8 + 1;
-		buffer[3] = 0;
-		FastWrite(hDevice, buffer);
-		buffer[2] = scoring_slot * 8 + 81;
-		FastWrite(hDevice, buffer);
-	}
-	scoring_slot = ss;
-	buffer[2] = 1 + (game_piece == CUBE ? scoring_slot * 8 : scoring_slot * 8 + 80);
-	buffer[3] = 1;
-	FastWrite(hDevice, buffer);
-}
 
 void ClearLEDs() {
 	for (int i = 0; i < 80; i++) {
@@ -1066,11 +1222,11 @@ void ClearLEDs() {
 void StateLEDs() {
 	buffer[1] = 181;
 	buffer[2] = K_CONE + 80;
-	buffer[3] = !game_piece;
+	buffer[3] = flash_cone * 2;
 	buffer[4] = 0;
 	SlowWrite(hDevice, buffer);
 	buffer[2] = K_CUBE + 80;
-	buffer[3] = game_piece;
+	buffer[3] = flash_cube * 2;
 	SlowWrite(hDevice, buffer);
 
 	buffer[2] = K_HIGH + 80;
@@ -1083,6 +1239,21 @@ void StateLEDs() {
 	buffer[3] = scoring_level == LOW;
 	SlowWrite(hDevice, buffer);
 
+	buffer[2] = K_CENTER + 80;
+	buffer[3] = scoring_offset == CENTER;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_LEFT + 80;
+	buffer[3] = scoring_offset == LEFT;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_RIGHT + 80;
+	buffer[3] = scoring_offset == RIGHT;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_FAR_LEFT + 80;
+	buffer[3] = scoring_offset == FAR_LEFT;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_FAR_RIGHT + 80;
+	buffer[3] = scoring_offset == FAR_RIGHT;
+	SlowWrite(hDevice, buffer);
 
 	buffer[2] = K_ONE + 80;
 	buffer[3] = scoring_slot == ONE;
@@ -1118,6 +1289,13 @@ void StateLEDs() {
 	SlowWrite(hDevice, buffer); 
 	buffer[2] = K_CUBEBEAM + 80;
 	buffer[3] = cubebeam;
+	SlowWrite(hDevice, buffer);
+
+	buffer[2] = K_STOPEE;
+	buffer[3] = stopEE * 2;
+	SlowWrite(hDevice, buffer);
+	buffer[2] = K_STOPEE + 80;
+	buffer[3] = stopEE*2;
 	SlowWrite(hDevice, buffer);
 }
 

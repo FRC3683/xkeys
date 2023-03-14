@@ -54,6 +54,7 @@
 #define K_CUBEBEAM 76
 #define K_STOPEE 32
 #define K_ZERO 49
+#define K_BS_FLASH 71
 
 #define K_ESCU 56
 #define K_ESCD 57

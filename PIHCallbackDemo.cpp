@@ -41,6 +41,7 @@ long hDevice = -1;
 int combotodevice[MAXDEVICES];
 bool flash_cone = false;
 bool flash_cube = false;
+bool flash_waste_of_button = false;
 int scoring_level = HIGH;
 int scoring_offset = CENTER;
 int scoring_slot = ONE;
@@ -65,7 +66,11 @@ bool intd = false;
 
 void Reset() {
 	ClearLEDs();
+	flash_cone = false;
+	flash_cube = false;
+	flash_waste_of_button = false;
 	scoring_level = HIGH;
+	scoring_offset = CENTER;
 	scoring_slot = ONE;
 	autominus = false;
 	autoplus = false;
@@ -815,7 +820,6 @@ DWORD __stdcall HandleDataEvent(UCHAR *pData, DWORD deviceID, DWORD error)
 					last_key = keynum;
 				}
 				break;
-
 			case K_CUBE:
 				if (state == 1) {
 					flash_cube = true;
@@ -823,6 +827,16 @@ DWORD __stdcall HandleDataEvent(UCHAR *pData, DWORD deviceID, DWORD error)
 				}
 				else if (state == 3) {
 					flash_cube = false;
+					last_key = keynum;
+				}
+				break;
+			case K_BS_FLASH:
+				if (state == 1) {
+					flash_waste_of_button = true;
+					key = keynum;
+				}
+				else if (state == 3) {
+					flash_waste_of_button = false;
 					last_key = keynum;
 				}
 				break;
@@ -1194,7 +1208,7 @@ void SendToDS() {
 	buffer[3] = (127 * (1 + lnxd - lnxu))^127;
 	buffer[4] = (127 * (1 + wrsd - wrsu))^127;
 	buffer[7] = flash_cone | flash_cube << 1 | ((scoring_offset * 3 + scoring_level) << 2) | conebeam << 6 | cubebeam << 7;
-	buffer[8] = score | stopEE << 1 | zero << 2 | autoplus << 3 | autominus << 4 | intu << 5 | intd << 6;
+	buffer[8] = score | stopEE << 1 | zero << 2 | autoplus << 3 | autominus << 4 | intu << 5 | intd << 6 | flash_waste_of_button << 7;
 	buffer[12] = scoring_slot;
 
 	//buffer[7] = game_piece | 1 << (1 + scoring_level) | 1 << (4 + scoring_slot);
@@ -1228,6 +1242,10 @@ void StateLEDs() {
 	buffer[2] = K_CUBE + 80;
 	buffer[3] = flash_cube * 2;
 	SlowWrite(hDevice, buffer);
+	buffer[2] = K_BS_FLASH + 80;
+	buffer[3] = flash_waste_of_button * 2;
+	SlowWrite(hDevice, buffer);
+
 
 	buffer[2] = K_HIGH + 80;
 	buffer[3] = scoring_level == HIGH;
